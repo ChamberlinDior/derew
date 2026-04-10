@@ -1,0 +1,14 @@
+package com.oviro.enums;
+
+public enum RideStatus {
+    REQUESTED,
+    DRIVER_ASSIGNED,
+    DRIVER_EN_ROUTE,
+    DRIVER_ARRIVED,
+    IN_PROGRESS,
+    COMPLETED,
+    CANCELLED_BY_CLIENT,
+    CANCELLED_BY_DRIVER,
+    PAYMENT_PENDING,
+    PAID
+}
