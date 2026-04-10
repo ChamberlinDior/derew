@@ -7,12 +7,11 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "driver_profiles", indexes = {
-    @Index(name = "idx_driver_license", columnList = "license_number", unique = true),
-    @Index(name = "idx_driver_status", columnList = "status")
+        @Index(name = "idx_driver_license", columnList = "license_number", unique = true),
+        @Index(name = "idx_driver_status", columnList = "status")
 })
 @Getter
 @Setter
@@ -75,4 +74,22 @@ public class DriverProfile extends BaseEntity {
     @OneToMany(mappedBy = "driver", fetch = FetchType.LAZY)
     @Builder.Default
     private List<Ride> rides = new ArrayList<>();
+
+    // =========================
+    // PHOTO DE PROFIL EN BLOB
+    // =========================
+
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "profile_photo_data", columnDefinition = "LONGBLOB")
+    private byte[] profilePhotoData;
+
+    @Column(name = "profile_photo_content_type", length = 100)
+    private String profilePhotoContentType;
+
+    @Column(name = "profile_photo_file_name", length = 255)
+    private String profilePhotoFileName;
+
+    @Column(name = "profile_photo_size")
+    private Long profilePhotoSize;
 }

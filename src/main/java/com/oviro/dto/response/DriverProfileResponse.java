@@ -42,6 +42,8 @@ public class DriverProfileResponse {
         private String lastName;
         private String email;
         private String phoneNumber;
+        private String profilePictureUrl;
+        private LocalDateTime dateOfBirth;
     }
 
     @Data

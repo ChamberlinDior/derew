@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,11 +29,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final SessionTokenRepository sessionTokenRepository;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
+        String path = request.getServletPath();
+
+        boolean skip =
+                path.startsWith("/auth/")
+                        || path.startsWith("/uploads/")
+                        || path.startsWith("/api-docs")
+                        || path.startsWith("/swagger-ui")
+                        || path.equals("/swagger-ui.html");
+
+        if (skip) {
+            log.debug("JWT filter skipped for path={}", path);
+        }
+
+        return skip;
+    }
+
+    @Override
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        String path = request.getServletPath();
+
         try {
             String token = extractToken(request);
+
+            log.debug("JWT filter processing path={}, hasToken={}", path, StringUtils.hasText(token));
 
             if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
                 String tokenType = jwtUtil.extractTokenType(token);
@@ -41,13 +67,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     UUID userId = jwtUtil.extractUserId(token);
                     String role = jwtUtil.extractRole(token);
 
-                    // Vérification que la session n'est pas révoquée
                     boolean sessionActive = sessionTokenRepository
                             .findByToken(token)
                             .map(s -> s.isActive())
                             .orElse(false);
 
-                    if (sessionActive) {
+                    log.debug(
+                            "JWT token parsed path={}, userId={}, role={}, sessionActive={}",
+                            path,
+                            userId,
+                            role,
+                            sessionActive
+                    );
+
+                    if (sessionActive && SecurityContextHolder.getContext().getAuthentication() == null) {
                         var auth = new UsernamePasswordAuthenticationToken(
                                 userId,
                                 null,
@@ -55,11 +88,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         );
                         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(auth);
+
+                        log.debug("JWT authentication set for userId={} on path={}", userId, path);
                     }
+                } else {
+                    log.debug("JWT ignored because tokenType={} on path={}", tokenType, path);
                 }
             }
         } catch (Exception ex) {
-            log.debug("Impossible d'authentifier l'utilisateur via JWT: {}", ex.getMessage());
+            log.debug("Impossible d'authentifier l'utilisateur via JWT sur path={} : {}", path, ex.getMessage());
         }
 
         filterChain.doFilter(request, response);

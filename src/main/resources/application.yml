@@ -8,7 +8,7 @@ spring:
     name: oviro-backend
 
   datasource:
-    url: jdbc:mysql://localhost:3306/oviro_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/oviro?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -70,6 +70,10 @@ oviro:
 
   sos:
     alert-radius-km: 5
+
+app:
+  storage:
+    upload-dir: uploads
 
 springdoc:
   api-docs:

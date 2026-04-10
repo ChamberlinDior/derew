@@ -72,6 +72,13 @@ CREATE TABLE driver_profiles (
     license_expiry_date DATE,
     national_id VARCHAR(50),
     national_id_document_url TEXT,
+
+    -- PHOTO DE PROFIL EN BLOB
+    profile_photo_data LONGBLOB NULL,
+    profile_photo_content_type VARCHAR(100) NULL,
+    profile_photo_file_name VARCHAR(255) NULL,
+    profile_photo_size BIGINT NULL,
+
     status VARCHAR(20) NOT NULL DEFAULT 'OFFLINE',
     current_latitude DECIMAL(10,7),
     current_longitude DECIMAL(10,7),
