@@ -5,13 +5,16 @@ import com.oviro.dto.request.RefreshTokenRequest;
 import com.oviro.dto.request.RegisterRequest;
 import com.oviro.dto.response.AuthResponse;
 import com.oviro.dto.response.UserResponse;
+import com.oviro.enums.DriverStatus;
 import com.oviro.enums.Role;
 import com.oviro.enums.UserStatus;
 import com.oviro.exception.BusinessException;
 import com.oviro.exception.UnauthorizedException;
+import com.oviro.model.DriverProfile;
 import com.oviro.model.SessionToken;
 import com.oviro.model.User;
 import com.oviro.model.Wallet;
+import com.oviro.repository.DriverProfileRepository;
 import com.oviro.repository.SessionTokenRepository;
 import com.oviro.repository.UserRepository;
 import com.oviro.repository.WalletRepository;
@@ -32,6 +35,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
+    private final DriverProfileRepository driverProfileRepository;
     private final SessionTokenRepository sessionTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -41,7 +45,9 @@ public class AuthService {
         if (userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
             throw new BusinessException("Ce numéro de téléphone est déjà utilisé", "PHONE_ALREADY_EXISTS");
         }
-        if (request.getEmail() != null && userRepository.existsByEmail(request.getEmail())) {
+
+        if (request.getEmail() != null && !request.getEmail().isBlank()
+                && userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException("Cet email est déjà utilisé", "EMAIL_ALREADY_EXISTS");
         }
 
@@ -57,9 +63,21 @@ public class AuthService {
 
         user = userRepository.save(user);
 
-        // Création automatique du wallet
-        Wallet wallet = Wallet.builder().user(user).build();
+        Wallet wallet = Wallet.builder()
+                .user(user)
+                .build();
         walletRepository.save(wallet);
+
+        if (user.getRole() == Role.DRIVER) {
+            DriverProfile driverProfile = DriverProfile.builder()
+                    .user(user)
+                    .licenseNumber(generateDriverLicenseNumber(user))
+                    .status(DriverStatus.OFFLINE)
+                    .verified(false)
+                    .build();
+
+            driverProfileRepository.save(driverProfile);
+        }
 
         log.info("Nouvel utilisateur enregistré: {} [{}]", user.getFullName(), user.getRole());
         return mapToResponse(user);
@@ -74,30 +92,34 @@ public class AuthService {
         if (user.isAccountLocked()) {
             throw new BusinessException("Compte temporairement verrouillé. Réessayez plus tard.", "ACCOUNT_LOCKED");
         }
+
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BusinessException("Compte inactif ou suspendu", "ACCOUNT_INACTIVE");
         }
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             handleFailedLogin(user);
             throw new UnauthorizedException("Identifiants incorrects");
         }
 
-        // Reset tentatives
         user.setFailedLoginAttempts(0);
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
 
+        if (user.getRole() == Role.DRIVER) {
+            ensureDriverProfileExists(user);
+        }
+
         String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getRole().name(), user.getEmail());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId());
 
-        // Persister la session
         SessionToken session = SessionToken.builder()
                 .user(user)
                 .token(accessToken)
                 .deviceInfo(request.getDeviceInfo())
                 .ipAddress(httpRequest.getRemoteAddr())
                 .userAgent(httpRequest.getHeader("User-Agent"))
-                .expiresAt(LocalDateTime.now().plusSeconds(900)) // 15 min
+                .expiresAt(LocalDateTime.now().plusSeconds(900))
                 .build();
         sessionTokenRepository.save(session);
 
@@ -113,6 +135,7 @@ public class AuthService {
     @Transactional
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         String token = request.getRefreshToken();
+
         if (!jwtUtil.validateToken(token) || !"REFRESH".equals(jwtUtil.extractTokenType(token))) {
             throw new UnauthorizedException("Refresh token invalide ou expiré");
         }
@@ -120,6 +143,10 @@ public class AuthService {
         var userId = jwtUtil.extractUserId(token);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Utilisateur introuvable"));
+
+        if (user.getRole() == Role.DRIVER) {
+            ensureDriverProfileExists(user);
+        }
 
         String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getRole().name(), user.getEmail());
         String newRefreshToken = jwtUtil.generateRefreshToken(user.getId());
@@ -156,11 +183,42 @@ public class AuthService {
     private void handleFailedLogin(User user) {
         int attempts = user.getFailedLoginAttempts() + 1;
         user.setFailedLoginAttempts(attempts);
+
         if (attempts >= 5) {
             user.setLockedUntil(LocalDateTime.now().plusMinutes(30));
             log.warn("Compte verrouillé après {} tentatives: {}", attempts, user.getPhoneNumber());
         }
+
         userRepository.save(user);
+    }
+
+    private void ensureDriverProfileExists(User user) {
+        driverProfileRepository.findByUserId(user.getId())
+                .orElseGet(() -> {
+                    DriverProfile driverProfile = DriverProfile.builder()
+                            .user(user)
+                            .licenseNumber(generateDriverLicenseNumber(user))
+                            .status(DriverStatus.OFFLINE)
+                            .verified(false)
+                            .build();
+
+                    DriverProfile saved = driverProfileRepository.save(driverProfile);
+                    log.warn("DriverProfile créé automatiquement au login/refresh pour userId={}", user.getId());
+                    return saved;
+                });
+    }
+
+    private String generateDriverLicenseNumber(User user) {
+        String base = "DRV-" + user.getId().toString().substring(0, 8).toUpperCase();
+        String candidate = base;
+        int suffix = 1;
+
+        while (driverProfileRepository.findByLicenseNumber(candidate).isPresent()) {
+            candidate = base + "-" + suffix;
+            suffix++;
+        }
+
+        return candidate;
     }
 
     private UserResponse mapToResponse(User user) {

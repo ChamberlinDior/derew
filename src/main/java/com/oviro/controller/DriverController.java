@@ -3,7 +3,7 @@ package com.oviro.controller;
 import com.oviro.dto.request.DriverLocationRequest;
 import com.oviro.dto.request.SosAlertRequest;
 import com.oviro.dto.response.ApiResponse;
-import com.oviro.model.DriverProfile;
+import com.oviro.dto.response.DriverProfileResponse;
 import com.oviro.service.DriverService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,7 +26,7 @@ public class DriverController {
 
     @GetMapping("/profile")
     @Operation(summary = "Profil du chauffeur connecté")
-    public ResponseEntity<ApiResponse<DriverProfile>> getProfile() {
+    public ResponseEntity<ApiResponse<DriverProfileResponse>> getProfile() {
         return ResponseEntity.ok(ApiResponse.ok(driverService.getMyProfile()));
     }
 
