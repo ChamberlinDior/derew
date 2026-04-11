@@ -1,13 +1,17 @@
 package com.oviro.service;
 
-import com.oviro.dto.request.RideRequest;
 import com.oviro.dto.request.RatingRequest;
+import com.oviro.dto.request.RideRequest;
 import com.oviro.dto.response.RideResponse;
 import com.oviro.enums.RideStatus;
 import com.oviro.exception.BusinessException;
 import com.oviro.exception.ResourceNotFoundException;
-import com.oviro.model.*;
-import com.oviro.repository.*;
+import com.oviro.model.DriverProfile;
+import com.oviro.model.Ride;
+import com.oviro.model.User;
+import com.oviro.repository.DriverProfileRepository;
+import com.oviro.repository.RideRepository;
+import com.oviro.repository.UserRepository;
 import com.oviro.util.FareCalculator;
 import com.oviro.util.ReferenceGenerator;
 import com.oviro.util.SecurityContextHelper;
@@ -41,19 +45,24 @@ public class RideService {
         User client = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", clientId.toString()));
 
-        // Vérifier qu'aucune course active n'est en cours
         List<RideStatus> activeStatuses = List.of(
-                RideStatus.REQUESTED, RideStatus.DRIVER_ASSIGNED,
-                RideStatus.DRIVER_EN_ROUTE, RideStatus.DRIVER_ARRIVED, RideStatus.IN_PROGRESS
+                RideStatus.REQUESTED,
+                RideStatus.DRIVER_ASSIGNED,
+                RideStatus.DRIVER_EN_ROUTE,
+                RideStatus.DRIVER_ARRIVED,
+                RideStatus.IN_PROGRESS
         );
+
         List<Ride> active = rideRepository.findActiveRidesByClient(clientId, activeStatuses);
         if (!active.isEmpty()) {
             throw new BusinessException("Une course est déjà en cours", "RIDE_ALREADY_ACTIVE");
         }
 
         BigDecimal distance = fareCalculator.calculateDistance(
-                request.getPickupLatitude(), request.getPickupLongitude(),
-                request.getDropoffLatitude(), request.getDropoffLongitude()
+                request.getPickupLatitude(),
+                request.getPickupLongitude(),
+                request.getDropoffLatitude(),
+                request.getDropoffLongitude()
         );
         int duration = fareCalculator.estimateDuration(distance);
         BigDecimal fare = fareCalculator.calculateFare(distance, duration);
@@ -75,6 +84,7 @@ public class RideService {
 
         ride = rideRepository.save(ride);
         log.info("Course demandée: {} par client {}", ride.getReference(), clientId);
+
         return mapToResponse(ride);
     }
 
@@ -108,13 +118,21 @@ public class RideService {
         validateStatusTransition(ride.getStatus(), newStatus);
 
         ride.setStatus(newStatus);
+
         switch (newStatus) {
+            case DRIVER_EN_ROUTE -> {
+                // optionnel : marque le départ vers le client
+            }
+            case DRIVER_ARRIVED -> {
+                // optionnel : chauffeur arrivé
+            }
             case IN_PROGRESS -> ride.setStartedAt(LocalDateTime.now());
             case COMPLETED -> {
                 ride.setCompletedAt(LocalDateTime.now());
                 ride.setActualFare(ride.getEstimatedFare());
             }
-            default -> {}
+            default -> {
+            }
         }
 
         ride = rideRepository.save(ride);
@@ -124,27 +142,34 @@ public class RideService {
     @Transactional
     public RideResponse cancelRide(UUID rideId, String reason) {
         UUID userId = securityContextHelper.getCurrentUserId();
+
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", rideId.toString()));
 
         List<RideStatus> cancellableStatuses = List.of(
-                RideStatus.REQUESTED, RideStatus.DRIVER_ASSIGNED, RideStatus.DRIVER_EN_ROUTE
+                RideStatus.REQUESTED,
+                RideStatus.DRIVER_ASSIGNED,
+                RideStatus.DRIVER_EN_ROUTE
         );
+
         if (!cancellableStatuses.contains(ride.getStatus())) {
             throw new BusinessException("Cette course ne peut plus être annulée", "RIDE_NOT_CANCELLABLE");
         }
 
         boolean isClient = ride.getClient().getId().equals(userId);
+
         ride.setStatus(isClient ? RideStatus.CANCELLED_BY_CLIENT : RideStatus.CANCELLED_BY_DRIVER);
         ride.setCancelledAt(LocalDateTime.now());
         ride.setCancellationReason(reason);
 
-        return mapToResponse(rideRepository.save(ride));
+        ride = rideRepository.save(ride);
+        return mapToResponse(ride);
     }
 
     @Transactional
     public RideResponse rateRide(UUID rideId, RatingRequest request) {
         UUID userId = securityContextHelper.getCurrentUserId();
+
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", rideId.toString()));
 
@@ -161,7 +186,8 @@ public class RideService {
             throw new BusinessException("Vous ne pouvez pas noter cette course");
         }
 
-        return mapToResponse(rideRepository.save(ride));
+        ride = rideRepository.save(ride);
+        return mapToResponse(ride);
     }
 
     @Transactional(readOnly = true)
@@ -180,9 +206,17 @@ public class RideService {
     @Transactional(readOnly = true)
     public Page<RideResponse> getDriverRides(Pageable pageable) {
         UUID driverUserId = securityContextHelper.getCurrentUserId();
+
         DriverProfile driver = driverProfileRepository.findByUserId(driverUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profil chauffeur", driverUserId.toString()));
+
         return rideRepository.findByDriverId(driver.getId(), pageable).map(this::mapToResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RideResponse> getAvailableRides(Double lat, Double lng, Pageable pageable) {
+        Page<Ride> rides = rideRepository.findByStatus(RideStatus.REQUESTED, pageable);
+        return rides.map(this::mapToResponse);
     }
 
     private void validateStatusTransition(RideStatus current, RideStatus next) {
@@ -195,9 +229,12 @@ public class RideService {
             case COMPLETED -> next == RideStatus.PAID;
             default -> false;
         };
+
         if (!valid) {
             throw new BusinessException(
-                    "Transition de statut invalide: " + current + " -> " + next, "INVALID_STATUS_TRANSITION");
+                    "Transition de statut invalide: " + current + " -> " + next,
+                    "INVALID_STATUS_TRANSITION"
+            );
         }
     }
 

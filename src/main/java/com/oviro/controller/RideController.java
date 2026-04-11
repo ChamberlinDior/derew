@@ -38,17 +38,25 @@ public class RideController {
                 .body(ApiResponse.ok("Course demandée avec succès", rideService.requestRide(request)));
     }
 
-    @GetMapping("/{rideId}")
-    @Operation(summary = "Détails d'une course")
-    public ResponseEntity<ApiResponse<RideResponse>> getRide(@PathVariable UUID rideId) {
-        return ResponseEntity.ok(ApiResponse.ok(rideService.getRideById(rideId)));
+    @GetMapping("/available")
+    @PreAuthorize("hasRole('DRIVER')")
+    @Operation(summary = "Lister les courses disponibles pour les chauffeurs")
+    public ResponseEntity<ApiResponse<Page<RideResponse>>> getAvailableRides(
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ResponseEntity.ok(
+                ApiResponse.ok(rideService.getAvailableRides(lat, lng, pageable))
+        );
     }
 
     @GetMapping("/my")
     @PreAuthorize("hasRole('CLIENT')")
     @Operation(summary = "Historique des courses du client connecté")
     public ResponseEntity<ApiResponse<Page<RideResponse>>> getMyRides(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
         return ResponseEntity.ok(ApiResponse.ok(rideService.getMyRides(pageable)));
     }
 
@@ -56,7 +64,8 @@ public class RideController {
     @PreAuthorize("hasRole('DRIVER')")
     @Operation(summary = "Historique des courses du chauffeur connecté")
     public ResponseEntity<ApiResponse<Page<RideResponse>>> getDriverRides(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
         return ResponseEntity.ok(ApiResponse.ok(rideService.getDriverRides(pageable)));
     }
 
@@ -72,7 +81,8 @@ public class RideController {
     @Operation(summary = "Mettre à jour le statut d'une course")
     public ResponseEntity<ApiResponse<RideResponse>> updateStatus(
             @PathVariable UUID rideId,
-            @RequestParam RideStatus status) {
+            @RequestParam RideStatus status
+    ) {
         return ResponseEntity.ok(ApiResponse.ok("Statut mis à jour", rideService.updateStatus(rideId, status)));
     }
 
@@ -80,7 +90,8 @@ public class RideController {
     @Operation(summary = "Annuler une course")
     public ResponseEntity<ApiResponse<RideResponse>> cancelRide(
             @PathVariable UUID rideId,
-            @RequestParam(required = false) String reason) {
+            @RequestParam(required = false) String reason
+    ) {
         return ResponseEntity.ok(ApiResponse.ok("Course annulée", rideService.cancelRide(rideId, reason)));
     }
 
@@ -88,7 +99,14 @@ public class RideController {
     @Operation(summary = "Noter une course")
     public ResponseEntity<ApiResponse<RideResponse>> rateRide(
             @PathVariable UUID rideId,
-            @Valid @RequestBody RatingRequest request) {
+            @Valid @RequestBody RatingRequest request
+    ) {
         return ResponseEntity.ok(ApiResponse.ok("Notation enregistrée", rideService.rateRide(rideId, request)));
+    }
+
+    @GetMapping("/{rideId:[0-9a-fA-F\\-]{36}}")
+    @Operation(summary = "Détails d'une course")
+    public ResponseEntity<ApiResponse<RideResponse>> getRide(@PathVariable UUID rideId) {
+        return ResponseEntity.ok(ApiResponse.ok(rideService.getRideById(rideId)));
     }
 }

@@ -62,17 +62,50 @@ public class DriverService {
             throw new BusinessException("Impossible de passer hors-ligne pendant une course active");
         }
 
-        driver.setStatus(online ? DriverStatus.ONLINE : DriverStatus.OFFLINE);
-        driverProfileRepository.save(driver);
-        log.info("Chauffeur {} -> {}", driver.getUser().getId(), driver.getStatus());
+        DriverStatus nextStatus = online ? DriverStatus.ONLINE : DriverStatus.OFFLINE;
+
+        int updated = driverProfileRepository.updateStatusByUserId(driver.getUser().getId(), nextStatus);
+        if (updated == 0) {
+            throw new BusinessException("Impossible de mettre à jour le statut du chauffeur");
+        }
+
+        log.info("Chauffeur {} -> {}", driver.getUser().getId(), nextStatus);
     }
 
     @Transactional
     public void updateLocation(DriverLocationRequest request) {
-        DriverProfile driver = getOrCreateMyProfileEntity();
-        driver.setCurrentLatitude(request.getLatitude());
-        driver.setCurrentLongitude(request.getLongitude());
-        driverProfileRepository.save(driver);
+        if (request.getLatitude() == null || request.getLongitude() == null) {
+            throw new BusinessException("Latitude et longitude sont obligatoires");
+        }
+
+        UUID userId = securityHelper.getCurrentUserId();
+
+        int updated = driverProfileRepository.updateCurrentLocationByUserId(
+                userId,
+                request.getLatitude(),
+                request.getLongitude()
+        );
+
+        if (updated == 0) {
+            DriverProfile created = getOrCreateMyProfileEntity();
+
+            int retry = driverProfileRepository.updateCurrentLocationByUserId(
+                    created.getUser().getId(),
+                    request.getLatitude(),
+                    request.getLongitude()
+            );
+
+            if (retry == 0) {
+                throw new BusinessException("Impossible de mettre à jour la position du chauffeur");
+            }
+        }
+
+        log.debug(
+                "Position chauffeur mise à jour userId={}, latitude={}, longitude={}",
+                userId,
+                request.getLatitude(),
+                request.getLongitude()
+        );
     }
 
     @Transactional(readOnly = true)

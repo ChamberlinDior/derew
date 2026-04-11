@@ -5,6 +5,7 @@ import com.oviro.model.DriverProfile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -38,7 +39,32 @@ public interface DriverProfileRepository extends JpaRepository<DriverProfile, UU
     List<DriverProfile> findNearbyOnlineDrivers(
             @Param("lat") BigDecimal lat,
             @Param("lng") BigDecimal lng,
-            @Param("radiusKm") double radiusKm);
+            @Param("radiusKm") double radiusKm
+    );
 
     long countByStatus(DriverStatus status);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE DriverProfile d
+        SET d.currentLatitude = :latitude,
+            d.currentLongitude = :longitude
+        WHERE d.user.id = :userId
+    """)
+    int updateCurrentLocationByUserId(
+            @Param("userId") UUID userId,
+            @Param("latitude") BigDecimal latitude,
+            @Param("longitude") BigDecimal longitude
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE DriverProfile d
+        SET d.status = :status
+        WHERE d.user.id = :userId
+    """)
+    int updateStatusByUserId(
+            @Param("userId") UUID userId,
+            @Param("status") DriverStatus status
+    );
 }
