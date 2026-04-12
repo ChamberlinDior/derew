@@ -169,7 +169,7 @@ public class DriverService {
         }
 
         if (request.getDateOfBirth() != null) {
-            user.setDateOfBirth(request.getDateOfBirth().atStartOfDay());
+            user.setDateOfBirth(request.getDateOfBirth());
         }
 
         if (request.getLicenseNumber() != null && !request.getLicenseNumber().isBlank()) {

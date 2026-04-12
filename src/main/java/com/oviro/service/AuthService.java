@@ -3,7 +3,10 @@ package com.oviro.service;
 import com.oviro.dto.request.LoginRequest;
 import com.oviro.dto.request.RefreshTokenRequest;
 import com.oviro.dto.request.RegisterRequest;
+import com.oviro.dto.request.UpdateUserProfileRequest;
 import com.oviro.dto.response.AuthResponse;
+import com.oviro.dto.response.UploadUserProfilePhotoResponse;
+import com.oviro.dto.response.UserProfilePhotoData;
 import com.oviro.dto.response.UserResponse;
 import com.oviro.enums.DriverStatus;
 import com.oviro.enums.Role;
@@ -25,8 +28,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -39,26 +44,21 @@ public class AuthService {
     private final SessionTokenRepository sessionTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
-        if (userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
-            throw new BusinessException("Ce numéro de téléphone est déjà utilisé", "PHONE_ALREADY_EXISTS");
-        }
-
-        if (request.getEmail() != null && !request.getEmail().isBlank()
-                && userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException("Cet email est déjà utilisé", "EMAIL_ALREADY_EXISTS");
-        }
+        validateUniqueEmailAndPhoneForCreate(request.getEmail(), request.getPhoneNumber());
 
         User user = User.builder()
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .email(request.getEmail())
-                .phoneNumber(request.getPhoneNumber())
+                .firstName(request.getFirstName().trim())
+                .lastName(request.getLastName().trim())
+                .email(normalizeNullable(request.getEmail()))
+                .phoneNumber(request.getPhoneNumber().trim())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .status(UserStatus.ACTIVE)
+                .dateOfBirth(request.getDateOfBirth())
                 .build();
 
         user = userRepository.save(user);
@@ -140,7 +140,7 @@ public class AuthService {
             throw new UnauthorizedException("Refresh token invalide ou expiré");
         }
 
-        var userId = jwtUtil.extractUserId(token);
+        UUID userId = jwtUtil.extractUserId(token);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Utilisateur introuvable"));
 
@@ -175,8 +175,80 @@ public class AuthService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public UserResponse getCurrentUser(UUID userId) {
+        User user = findUserByIdOrThrow(userId);
+        return mapToResponse(user);
+    }
+
     @Transactional
-    public void revokeAllSessions(java.util.UUID userId) {
+    public UserResponse updateCurrentUserProfile(UUID userId, UpdateUserProfileRequest request) {
+        User user = findUserByIdOrThrow(userId);
+
+        validateUniqueEmailAndPhoneForUpdate(
+                normalizeNullable(request.getEmail()),
+                request.getPhoneNumber(),
+                user.getId()
+        );
+
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        user.setEmail(normalizeNullable(request.getEmail()));
+        user.setPhoneNumber(request.getPhoneNumber().trim());
+        user.setDateOfBirth(request.getDateOfBirth());
+
+        user = userRepository.save(user);
+
+        log.info("Profil rider mis à jour pour userId={}", user.getId());
+        return mapToResponse(user);
+    }
+
+    @Transactional
+    public UploadUserProfilePhotoResponse uploadCurrentUserProfilePhoto(UUID userId, MultipartFile file) {
+        User user = findUserByIdOrThrow(userId);
+
+        FileStorageService.ImageBlobPayload payload = fileStorageService.extractImageBlobPayload(file);
+
+        user.setProfilePictureData(payload.getData());
+        user.setProfilePictureContentType(payload.getContentType());
+        user.setProfilePictureFileName(payload.getFileName());
+        user.setProfilePictureSize(payload.getSize());
+
+        userRepository.save(user);
+
+        log.info("Photo de profil rider mise à jour pour userId={}, size={} bytes", userId, payload.getSize());
+
+        return UploadUserProfilePhotoResponse.builder()
+                .message("Photo de profil mise à jour avec succès")
+                .profilePictureUrl(fileStorageService.buildUserProfilePhotoUrl())
+                .contentType(payload.getContentType())
+                .fileName(payload.getFileName())
+                .size(payload.getSize())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfilePhotoData getCurrentUserProfilePhoto(UUID userId) {
+        User user = findUserByIdOrThrow(userId);
+
+        if (!user.hasProfilePicture()) {
+            throw new BusinessException("Aucune photo de profil trouvée pour cet utilisateur");
+        }
+
+        return UserProfilePhotoData.builder()
+                .data(user.getProfilePictureData())
+                .contentType(user.getProfilePictureContentType())
+                .fileName(user.getProfilePictureFileName() != null
+                        ? user.getProfilePictureFileName()
+                        : "profile-photo")
+                .size(user.getProfilePictureSize() != null
+                        ? user.getProfilePictureSize()
+                        : user.getProfilePictureData().length)
+                .build();
+    }
+
+    @Transactional
+    public void revokeAllSessions(UUID userId) {
         sessionTokenRepository.revokeAllUserSessions(userId);
     }
 
@@ -221,6 +293,39 @@ public class AuthService {
         return candidate;
     }
 
+    private void validateUniqueEmailAndPhoneForCreate(String email, String phoneNumber) {
+        if (userRepository.existsByPhoneNumber(phoneNumber)) {
+            throw new BusinessException("Ce numéro de téléphone est déjà utilisé", "PHONE_ALREADY_EXISTS");
+        }
+
+        if (email != null && !email.isBlank() && userRepository.existsByEmail(email)) {
+            throw new BusinessException("Cet email est déjà utilisé", "EMAIL_ALREADY_EXISTS");
+        }
+    }
+
+    private void validateUniqueEmailAndPhoneForUpdate(String email, String phoneNumber, UUID currentUserId) {
+        if (userRepository.existsByPhoneNumberAndIdNot(phoneNumber, currentUserId)) {
+            throw new BusinessException("Ce numéro de téléphone est déjà utilisé", "PHONE_ALREADY_EXISTS");
+        }
+
+        if (email != null && !email.isBlank() && userRepository.existsByEmailAndIdNot(email, currentUserId)) {
+            throw new BusinessException("Cet email est déjà utilisé", "EMAIL_ALREADY_EXISTS");
+        }
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private User findUserByIdOrThrow(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Utilisateur introuvable"));
+    }
+
     private UserResponse mapToResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())
@@ -230,6 +335,9 @@ public class AuthService {
                 .phoneNumber(user.getPhoneNumber())
                 .role(user.getRole())
                 .status(user.getStatus())
+                .dateOfBirth(user.getDateOfBirth())
+                .profilePictureUrl(user.hasProfilePicture() ? fileStorageService.buildUserProfilePhotoUrl() : null)
+                .hasProfilePicture(user.hasProfilePicture())
                 .emailVerified(user.isEmailVerified())
                 .phoneVerified(user.isPhoneVerified())
                 .createdAt(user.getCreatedAt())

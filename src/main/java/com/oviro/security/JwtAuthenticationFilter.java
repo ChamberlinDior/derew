@@ -33,8 +33,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         boolean skip =
-                path.startsWith("/auth/")
-                        || path.startsWith("/uploads/")
+                "/auth/register".equals(path)
+                        || "/auth/login".equals(path)
+                        || "/auth/refresh".equals(path)
                         || path.startsWith("/api-docs")
                         || path.startsWith("/swagger-ui")
                         || path.equals("/swagger-ui.html");
@@ -69,7 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     boolean sessionActive = sessionTokenRepository
                             .findByToken(token)
-                            .map(s -> s.isActive())
+                            .map(session -> session.isActive())
                             .orElse(false);
 
                     log.debug(

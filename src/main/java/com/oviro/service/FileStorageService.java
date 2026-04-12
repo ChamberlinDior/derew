@@ -1,6 +1,8 @@
 package com.oviro.service;
 
 import com.oviro.exception.BusinessException;
+import lombok.Builder;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -27,6 +29,8 @@ public class FileStorageService {
             "image/png",
             "image/webp"
     );
+
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     private final Path uploadRoot;
 
@@ -86,6 +90,26 @@ public class FileStorageService {
         return "/public/files/profile-photo/" + fileName;
     }
 
+    public ImageBlobPayload extractImageBlobPayload(MultipartFile file) {
+        validateImage(file);
+
+        try {
+            return ImageBlobPayload.builder()
+                    .data(file.getBytes())
+                    .contentType(normalizeContentType(file.getContentType()))
+                    .fileName(cleanOriginalFileName(file.getOriginalFilename()))
+                    .size(file.getSize())
+                    .build();
+        } catch (IOException e) {
+            log.error("Failed to read uploaded image into memory", e);
+            throw new BusinessException("Impossible de lire le fichier image");
+        }
+    }
+
+    public String buildUserProfilePhotoUrl() {
+        return "/auth/me/profile-photo";
+    }
+
     private Path getDriverProfileDirectory() {
         return uploadRoot.resolve("drivers").resolve("profiles");
     }
@@ -95,19 +119,45 @@ public class FileStorageService {
             throw new BusinessException("Le fichier image est obligatoire");
         }
 
-        if (file.getSize() > 5 * 1024 * 1024) {
+        if (file.getSize() > MAX_FILE_SIZE) {
             throw new BusinessException("La photo de profil ne doit pas dépasser 5 MB");
         }
 
-        String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase())) {
+        String contentType = normalizeContentType(file.getContentType());
+        if (!ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new BusinessException("Format image non supporté. Utilise JPG, PNG ou WEBP");
         }
     }
 
+    private String normalizeContentType(String contentType) {
+        if (contentType == null) {
+            return "";
+        }
+        return contentType.trim().toLowerCase();
+    }
+
+    private String cleanOriginalFileName(String originalFileName) {
+        String cleaned = StringUtils.cleanPath(originalFileName == null ? "profile-photo.jpg" : originalFileName);
+        if (cleaned.isBlank()) {
+            return "profile-photo.jpg";
+        }
+        return cleaned;
+    }
+
     private String getExtension(String fileName) {
         int idx = fileName.lastIndexOf('.');
-        if (idx < 0) return ".jpg";
+        if (idx < 0) {
+            return ".jpg";
+        }
         return fileName.substring(idx).toLowerCase();
+    }
+
+    @Data
+    @Builder
+    public static class ImageBlobPayload {
+        private byte[] data;
+        private String contentType;
+        private String fileName;
+        private long size;
     }
 }

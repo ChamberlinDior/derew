@@ -43,7 +43,7 @@ public class DriverProfileResponse {
         private String email;
         private String phoneNumber;
         private String profilePictureUrl;
-        private LocalDateTime dateOfBirth;
+        private LocalDate dateOfBirth;
     }
 
     @Data

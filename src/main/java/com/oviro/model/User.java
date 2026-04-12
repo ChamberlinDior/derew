@@ -5,15 +5,16 @@ import com.oviro.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "users", indexes = {
-    @Index(name = "idx_user_email", columnList = "email", unique = true),
-    @Index(name = "idx_user_phone", columnList = "phone_number", unique = true),
-    @Index(name = "idx_user_role", columnList = "role")
+        @Index(name = "idx_user_email", columnList = "email", unique = true),
+        @Index(name = "idx_user_phone", columnList = "phone_number", unique = true),
+        @Index(name = "idx_user_role", columnList = "role")
 })
 @Getter
 @Setter
@@ -46,11 +47,22 @@ public class User extends BaseEntity {
     @Builder.Default
     private UserStatus status = UserStatus.PENDING_VERIFICATION;
 
-    @Column(name = "profile_picture_url")
-    private String profilePictureUrl;
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "profile_picture_data", columnDefinition = "LONGBLOB")
+    private byte[] profilePictureData;
+
+    @Column(name = "profile_picture_content_type", length = 100)
+    private String profilePictureContentType;
+
+    @Column(name = "profile_picture_file_name", length = 255)
+    private String profilePictureFileName;
+
+    @Column(name = "profile_picture_size")
+    private Long profilePictureSize;
 
     @Column(name = "date_of_birth")
-    private LocalDateTime dateOfBirth;
+    private LocalDate dateOfBirth;
 
     @Column(name = "email_verified")
     @Builder.Default
@@ -90,5 +102,12 @@ public class User extends BaseEntity {
 
     public boolean isAccountLocked() {
         return lockedUntil != null && LocalDateTime.now().isBefore(lockedUntil);
+    }
+
+    public boolean hasProfilePicture() {
+        return profilePictureData != null
+                && profilePictureData.length > 0
+                && profilePictureContentType != null
+                && !profilePictureContentType.isBlank();
     }
 }
