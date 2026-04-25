@@ -38,6 +38,7 @@ public class RideService {
     private final FareCalculator fareCalculator;
     private final ReferenceGenerator referenceGenerator;
     private final SecurityContextHelper securityContextHelper;
+    private final NotificationService notificationService;
 
     @Transactional
     public RideResponse requestRide(RideRequest request) {
@@ -107,6 +108,7 @@ public class RideService {
         ride = rideRepository.save(ride);
 
         log.info("Course {} acceptée par chauffeur {}", ride.getReference(), driverUserId);
+        notificationService.notifyRideAccepted(ride);
         return mapToResponse(ride);
     }
 
@@ -120,22 +122,26 @@ public class RideService {
         ride.setStatus(newStatus);
 
         switch (newStatus) {
-            case DRIVER_EN_ROUTE -> {
-                // optionnel : marque le départ vers le client
-            }
-            case DRIVER_ARRIVED -> {
-                // optionnel : chauffeur arrivé
-            }
-            case IN_PROGRESS -> ride.setStartedAt(LocalDateTime.now());
+            case DRIVER_EN_ROUTE -> { }
+            case DRIVER_ARRIVED  -> { }
+            case IN_PROGRESS     -> ride.setStartedAt(LocalDateTime.now());
             case COMPLETED -> {
                 ride.setCompletedAt(LocalDateTime.now());
                 ride.setActualFare(ride.getEstimatedFare());
             }
-            default -> {
-            }
+            default -> { }
         }
 
         ride = rideRepository.save(ride);
+
+        // Fire notifications based on the new status
+        switch (newStatus) {
+            case DRIVER_ARRIVED -> notificationService.notifyDriverArrived(ride);
+            case IN_PROGRESS    -> notificationService.notifyRideStarted(ride);
+            case COMPLETED      -> notificationService.notifyRideCompleted(ride);
+            default -> { }
+        }
+
         return mapToResponse(ride);
     }
 

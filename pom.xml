@@ -127,6 +127,25 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- WEBSOCKET / STOMP -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
+        <!-- FIREBASE ADMIN (FCM push notifications) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.2.0</version>
+        </dependency>
+
+        <!-- FLYWAY MySQL support (required for Flyway 10+) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
         <!-- TEST -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -82,6 +82,9 @@ public class User extends BaseEntity {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
+    @Column(name = "fcm_token", length = 500)
+    private String fcmToken;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Wallet wallet;
 

@@ -53,6 +53,7 @@ public class DriverService {
     private final UserRepository userRepository;
     private final VehicleRepository vehicleRepository;
     private final SecurityContextHelper securityHelper;
+    private final NotificationService notificationService;
 
     @Transactional
     public void setOnlineStatus(boolean online) {
@@ -133,7 +134,9 @@ public class DriverService {
                 .description(request.getDescription())
                 .build();
 
-        return sosAlertRepository.save(alert);
+        alert = sosAlertRepository.save(alert);
+        notificationService.notifySosAlertToAdmins(alert);
+        return alert;
     }
 
     @Transactional(readOnly = true)

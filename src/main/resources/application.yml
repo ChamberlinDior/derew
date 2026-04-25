@@ -71,6 +71,12 @@ oviro:
   sos:
     alert-radius-km: 5
 
+  fcm:
+    # Set to true and supply a Firebase service-account JSON to enable push notifications
+    enabled: false
+    # Path to the Firebase service-account JSON (classpath: or file: prefix)
+    service-account-path: classpath:firebase/service-account.json
+
 app:
   storage:
     upload-dir: uploads

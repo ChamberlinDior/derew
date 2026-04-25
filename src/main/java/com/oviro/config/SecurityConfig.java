@@ -35,7 +35,9 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/api-docs/**",
-            "/actuator/health"
+            "/actuator/health",
+            // WebSocket handshake (STOMP auth is handled inside the ChannelInterceptor)
+            "/ws/**"
     };
 
     @Bean

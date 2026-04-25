@@ -34,6 +34,7 @@ public class WalletService {
     private final TransactionRepository transactionRepository;
     private final ReferenceGenerator referenceGenerator;
     private final SecurityContextHelper securityContextHelper;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public WalletResponse getMyWallet() {
@@ -73,6 +74,9 @@ public class WalletService {
 
         tx = transactionRepository.save(tx);
         log.info("Recharge wallet {} : +{} XAF (ref: {})", userId, request.getAmount(), tx.getReference());
+
+        notificationService.notifyWalletRecharged(userId, request.getAmount(), wallet.getBalance());
+
         return mapTransaction(tx);
     }
 
