@@ -1,0 +1,2 @@
+ALTER TABLE notifications
+    MODIFY COLUMN type VARCHAR(64) NOT NULL;

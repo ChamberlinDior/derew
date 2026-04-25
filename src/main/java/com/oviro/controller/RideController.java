@@ -3,8 +3,10 @@ package com.oviro.controller;
 import com.oviro.dto.request.RatingRequest;
 import com.oviro.dto.request.RideRequest;
 import com.oviro.dto.response.ApiResponse;
+import com.oviro.dto.response.RideEstimateResponse;
 import com.oviro.dto.response.RideResponse;
 import com.oviro.enums.RideStatus;
+import com.oviro.enums.ServiceType;
 import com.oviro.service.RideService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -19,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @RestController
@@ -29,6 +32,18 @@ import java.util.UUID;
 public class RideController {
 
     private final RideService rideService;
+
+    @GetMapping("/estimate")
+    @Operation(summary = "Estimer le prix d'une course")
+    public ResponseEntity<ApiResponse<RideEstimateResponse>> estimate(
+            @RequestParam BigDecimal fromLat,
+            @RequestParam BigDecimal fromLng,
+            @RequestParam BigDecimal toLat,
+            @RequestParam BigDecimal toLng,
+            @RequestParam(required = false, defaultValue = "STANDARD") ServiceType serviceType) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                rideService.estimateRide(fromLat, fromLng, toLat, toLng, serviceType)));
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('CLIENT')")

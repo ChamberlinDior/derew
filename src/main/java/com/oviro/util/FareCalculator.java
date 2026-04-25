@@ -1,31 +1,49 @@
 package com.oviro.util;
 
+import com.oviro.enums.ServiceType;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalTime;
 
 @Component
 public class FareCalculator {
 
-    private static final BigDecimal BASE_FARE = BigDecimal.valueOf(500);       // XAF
-    private static final BigDecimal RATE_PER_KM = BigDecimal.valueOf(200);     // XAF/km
-    private static final BigDecimal RATE_PER_MINUTE = BigDecimal.valueOf(20);  // XAF/min
-    private static final BigDecimal MINIMUM_FARE = BigDecimal.valueOf(800);
+    private static final BigDecimal BASE_FARE        = BigDecimal.valueOf(500);
+    private static final BigDecimal RATE_PER_KM      = BigDecimal.valueOf(200);
+    private static final BigDecimal RATE_PER_MINUTE  = BigDecimal.valueOf(20);
+    private static final BigDecimal MINIMUM_FARE     = BigDecimal.valueOf(800);
 
-    /**
-     * Calcul du tarif estimé basé sur distance et durée.
-     */
+    private static final BigDecimal NIGHT_SURCHARGE       = BigDecimal.valueOf(1.3);
+    private static final BigDecimal PEAK_HOUR_SURCHARGE   = BigDecimal.valueOf(1.2);
+
     public BigDecimal calculateFare(BigDecimal distanceKm, int durationMinutes) {
-        BigDecimal distanceCost = RATE_PER_KM.multiply(distanceKm);
-        BigDecimal timeCost = RATE_PER_MINUTE.multiply(BigDecimal.valueOf(durationMinutes));
-        BigDecimal total = BASE_FARE.add(distanceCost).add(timeCost);
-        return total.max(MINIMUM_FARE).setScale(2, RoundingMode.HALF_UP);
+        return calculateFare(distanceKm, durationMinutes, ServiceType.STANDARD);
     }
 
-    /**
-     * Distance Haversine entre deux coordonnées GPS (en km).
-     */
+    public BigDecimal calculateFare(BigDecimal distanceKm, int durationMinutes, ServiceType serviceType) {
+        BigDecimal distanceCost = RATE_PER_KM.multiply(distanceKm);
+        BigDecimal timeCost = RATE_PER_MINUTE.multiply(BigDecimal.valueOf(durationMinutes));
+        BigDecimal base = BASE_FARE.add(distanceCost).add(timeCost);
+
+        // Appliquer le multiplicateur selon le type de service
+        double multiplier = serviceType != null ? serviceType.getPriceMultiplier() : 1.0;
+        BigDecimal fare = base.multiply(BigDecimal.valueOf(multiplier));
+
+        // Surcharge heures de pointe (7h-9h, 17h-19h)
+        if (isPeakHour()) {
+            fare = fare.multiply(PEAK_HOUR_SURCHARGE);
+        }
+
+        // Surcharge nuit (22h-6h)
+        if (isNightTime()) {
+            fare = fare.multiply(NIGHT_SURCHARGE);
+        }
+
+        return fare.max(MINIMUM_FARE).setScale(2, RoundingMode.HALF_UP);
+    }
+
     public BigDecimal calculateDistance(BigDecimal lat1, BigDecimal lon1,
                                         BigDecimal lat2, BigDecimal lon2) {
         final int EARTH_RADIUS_KM = 6371;
@@ -40,10 +58,18 @@ public class FareCalculator {
         return BigDecimal.valueOf(distanceKm).setScale(3, RoundingMode.HALF_UP);
     }
 
-    /**
-     * Durée estimée en minutes (vitesse moyenne 30 km/h en ville).
-     */
     public int estimateDuration(BigDecimal distanceKm) {
         return (int) Math.ceil(distanceKm.doubleValue() / 30.0 * 60);
+    }
+
+    private boolean isPeakHour() {
+        LocalTime now = LocalTime.now();
+        return (now.isAfter(LocalTime.of(7, 0)) && now.isBefore(LocalTime.of(9, 0)))
+                || (now.isAfter(LocalTime.of(17, 0)) && now.isBefore(LocalTime.of(19, 0)));
+    }
+
+    private boolean isNightTime() {
+        LocalTime now = LocalTime.now();
+        return now.isAfter(LocalTime.of(22, 0)) || now.isBefore(LocalTime.of(6, 0));
     }
 }

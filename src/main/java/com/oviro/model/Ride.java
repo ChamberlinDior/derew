@@ -1,6 +1,7 @@
 package com.oviro.model;
 
 import com.oviro.enums.RideStatus;
+import com.oviro.enums.ServiceType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -106,10 +107,34 @@ public class Ride extends BaseEntity {
     @Column(name = "client_review", length = 1000)
     private String clientReview;
 
+    // -- Type de service --
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_type", length = 20)
+    @Builder.Default
+    private ServiceType serviceType = ServiceType.STANDARD;
+
+    // -- Pour quelqu'un d'autre --
+    @Column(name = "for_someone_else", nullable = false)
+    @Builder.Default
+    private Boolean forSomeoneElse = false;
+
+    @Column(name = "recipient_phone", length = 20)
+    private String recipientPhone;
+
+    @Column(name = "recipient_name", length = 200)
+    private String recipientName;
+
+    @Column(name = "sender_note", length = 500)
+    private String senderNote;
+
     // -- Paiement --
     @OneToOne(mappedBy = "ride", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private QrCodePayment qrCodePayment;
 
     @OneToOne(mappedBy = "ride", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Transaction transaction;
+
+    public boolean isForSomeoneElse() {
+        return Boolean.TRUE.equals(forSomeoneElse);
+    }
 }

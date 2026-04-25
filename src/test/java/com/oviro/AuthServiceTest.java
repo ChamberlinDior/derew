@@ -50,7 +50,6 @@ class AuthServiceTest {
     @DisplayName("Inscription réussie d'un nouveau client")
     void register_success() {
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
-        when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashedPassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> {
             User u = inv.getArgument(0);

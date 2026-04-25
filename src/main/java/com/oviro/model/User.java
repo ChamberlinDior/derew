@@ -85,6 +85,9 @@ public class User extends BaseEntity {
     @Column(name = "fcm_token", length = 500)
     private String fcmToken;
 
+    @Column(name = "transfer_pin_hash", length = 255)
+    private String transferPinHash;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Wallet wallet;
 

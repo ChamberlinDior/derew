@@ -6,5 +6,7 @@ public enum TransactionType {
     COMMISSION,
     WITHDRAWAL,
     REFUND,
-    BONUS
+    BONUS,
+    TRANSFER_DEBIT,
+    TRANSFER_CREDIT
 }

@@ -44,4 +44,6 @@ public interface RideRepository extends JpaRepository<Ride, UUID> {
     long countCompletedByDriver(@Param("driverId") UUID driverId);
 
     boolean existsByReference(String reference);
+
+    long countByStatusIn(List<RideStatus> statuses);
 }

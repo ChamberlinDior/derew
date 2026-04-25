@@ -1,8 +1,11 @@
 package com.oviro.dto.request;
 
+import com.oviro.enums.ServiceType;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Data
 public class RideRequest {
@@ -28,4 +31,22 @@ public class RideRequest {
     @NotNull(message = "La longitude de destination est obligatoire")
     @DecimalMin(value = "-180.0") @DecimalMax(value = "180.0")
     private BigDecimal dropoffLongitude;
+
+    private ServiceType serviceType = ServiceType.STANDARD;
+
+    // Adresse sauvegardée (alternative aux coordonnées)
+    private UUID savedPickupAddressId;
+    private UUID savedDropoffAddressId;
+
+    // Pour quelqu'un d'autre
+    private boolean forSomeoneElse = false;
+
+    @Size(max = 20)
+    private String recipientPhone;
+
+    @Size(max = 200)
+    private String recipientName;
+
+    @Size(max = 500)
+    private String senderNote;
 }

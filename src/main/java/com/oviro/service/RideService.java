@@ -2,8 +2,10 @@ package com.oviro.service;
 
 import com.oviro.dto.request.RatingRequest;
 import com.oviro.dto.request.RideRequest;
+import com.oviro.dto.response.RideEstimateResponse;
 import com.oviro.dto.response.RideResponse;
 import com.oviro.enums.RideStatus;
+import com.oviro.enums.ServiceType;
 import com.oviro.exception.BusinessException;
 import com.oviro.exception.ResourceNotFoundException;
 import com.oviro.model.DriverProfile;
@@ -66,7 +68,8 @@ public class RideService {
                 request.getDropoffLongitude()
         );
         int duration = fareCalculator.estimateDuration(distance);
-        BigDecimal fare = fareCalculator.calculateFare(distance, duration);
+        ServiceType serviceType = request.getServiceType() != null ? request.getServiceType() : ServiceType.STANDARD;
+        BigDecimal fare = fareCalculator.calculateFare(distance, duration, serviceType);
 
         Ride ride = Ride.builder()
                 .reference(referenceGenerator.generateRideReference())
@@ -80,6 +83,11 @@ public class RideService {
                 .estimatedDistanceKm(distance)
                 .estimatedDurationMinutes(duration)
                 .estimatedFare(fare)
+                .serviceType(serviceType)
+                .forSomeoneElse(request.isForSomeoneElse())
+                .recipientPhone(request.getRecipientPhone())
+                .recipientName(request.getRecipientName())
+                .senderNote(request.getSenderNote())
                 .requestedAt(LocalDateTime.now())
                 .build();
 
@@ -220,6 +228,33 @@ public class RideService {
     }
 
     @Transactional(readOnly = true)
+    public RideEstimateResponse estimateRide(BigDecimal fromLat, BigDecimal fromLng,
+                                             BigDecimal toLat, BigDecimal toLng,
+                                             ServiceType serviceType) {
+        if (serviceType == null) serviceType = ServiceType.STANDARD;
+
+        BigDecimal distance = fareCalculator.calculateDistance(fromLat, fromLng, toLat, toLng);
+        int duration = fareCalculator.estimateDuration(distance);
+        BigDecimal fare = fareCalculator.calculateFare(distance, duration, serviceType);
+
+        BigDecimal base = BigDecimal.valueOf(500);
+        BigDecimal distanceCost = distance.multiply(BigDecimal.valueOf(200));
+        BigDecimal timeCost = BigDecimal.valueOf(duration).multiply(BigDecimal.valueOf(20));
+
+        return RideEstimateResponse.builder()
+                .serviceType(serviceType)
+                .estimatedPrice(fare)
+                .estimatedDurationMinutes(duration)
+                .estimatedDistanceKm(distance)
+                .priceBreakdown(java.util.Map.of(
+                        "base", base,
+                        "distance", distanceCost,
+                        "time", timeCost
+                ))
+                .build();
+    }
+
+    @Transactional(readOnly = true)
     public Page<RideResponse> getAvailableRides(Double lat, Double lng, Pageable pageable) {
         Page<Ride> rides = rideRepository.findByStatus(RideStatus.REQUESTED, pageable);
         return rides.map(this::mapToResponse);
@@ -264,10 +299,15 @@ public class RideService {
                 .estimatedFare(ride.getEstimatedFare())
                 .actualFare(ride.getActualFare())
                 .status(ride.getStatus())
+                .serviceType(ride.getServiceType())
+                .forSomeoneElse(ride.isForSomeoneElse())
+                .recipientName(ride.getRecipientName())
                 .requestedAt(ride.getRequestedAt())
                 .completedAt(ride.getCompletedAt())
+                .cancelledAt(ride.getCancelledAt())
                 .clientRating(ride.getClientRating())
                 .driverRating(ride.getDriverRating())
+                .clientReview(ride.getClientReview())
                 .build();
     }
 }
