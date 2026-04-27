@@ -88,6 +88,12 @@ public class User extends BaseEntity {
     @Column(name = "transfer_pin_hash", length = 255)
     private String transferPinHash;
 
+    @Column(name = "referral_code", unique = true, length = 20)
+    private String referralCode;
+
+    @Column(name = "referred_by_code", length = 20)
+    private String referredByCode;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Wallet wallet;
 

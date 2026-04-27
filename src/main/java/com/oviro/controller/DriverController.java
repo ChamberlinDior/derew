@@ -1,5 +1,6 @@
 package com.oviro.controller;
 
+import com.oviro.dto.request.DriverKycRequest;
 import com.oviro.dto.request.DriverLocationRequest;
 import com.oviro.dto.request.SosAlertRequest;
 import com.oviro.dto.request.UpdateDriverProfileRequest;
@@ -8,6 +9,8 @@ import com.oviro.dto.response.DriverProfileResponse;
 import com.oviro.dto.response.UploadDriverProfilePhotoResponse;
 import com.oviro.model.DriverProfile;
 import com.oviro.service.DriverService;
+import com.oviro.service.TrackingService;
+import com.oviro.util.SecurityContextHelper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +32,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class DriverController {
 
     private final DriverService driverService;
+    private final TrackingService trackingService;
+    private final SecurityContextHelper securityHelper;
 
     @GetMapping("/profile")
     @Operation(summary = "Profil du chauffeur connecté")
@@ -95,9 +100,10 @@ public class DriverController {
     }
 
     @PatchMapping("/location")
-    @Operation(summary = "Mettre à jour la position GPS")
+    @Operation(summary = "Mettre à jour la position GPS (broadcast temps réel aux clients)")
     public ResponseEntity<ApiResponse<Void>> updateLocation(@Valid @RequestBody DriverLocationRequest request) {
         driverService.updateLocation(request);
+        trackingService.broadcastDriverLocation(securityHelper.getCurrentUserId(), request);
         return ResponseEntity.ok(ApiResponse.ok("Position mise à jour", null));
     }
 
@@ -106,5 +112,26 @@ public class DriverController {
     public ResponseEntity<ApiResponse<Void>> triggerSos(@Valid @RequestBody SosAlertRequest request) {
         driverService.triggerSos(request);
         return ResponseEntity.ok(ApiResponse.ok("Alerte SOS envoyée aux équipes OVIRO", null));
+    }
+
+    @PostMapping("/kyc/license")
+    @Operation(summary = "Uploader le permis de conduire (KYC)")
+    public ResponseEntity<ApiResponse<Void>> uploadLicense(@RequestPart("file") MultipartFile file) {
+        driverService.uploadKycDocument(file, "LICENSE");
+        return ResponseEntity.ok(ApiResponse.ok("Permis téléchargé, en attente de validation", null));
+    }
+
+    @PostMapping("/kyc/national-id")
+    @Operation(summary = "Uploader la carte nationale d'identité (KYC)")
+    public ResponseEntity<ApiResponse<Void>> uploadNationalId(@RequestPart("file") MultipartFile file) {
+        driverService.uploadKycDocument(file, "NATIONAL_ID");
+        return ResponseEntity.ok(ApiResponse.ok("CNI téléchargée, en attente de validation", null));
+    }
+
+    @PostMapping("/kyc/vehicle-card")
+    @Operation(summary = "Uploader la carte grise du véhicule (KYC)")
+    public ResponseEntity<ApiResponse<Void>> uploadVehicleCard(@RequestPart("file") MultipartFile file) {
+        driverService.uploadKycDocument(file, "VEHICLE_CARD");
+        return ResponseEntity.ok(ApiResponse.ok("Carte grise téléchargée, en attente de validation", null));
     }
 }

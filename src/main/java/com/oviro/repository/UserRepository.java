@@ -47,4 +47,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @EntityGraph(attributePaths = {})
     @Query("SELECT u FROM User u WHERE u.id = :id")
     Optional<User> findFullById(@Param("id") UUID id);
+
+    Optional<User> findByReferralCode(String referralCode);
 }

@@ -43,6 +43,22 @@ public interface RideRepository extends JpaRepository<Ride, UUID> {
     @Query("SELECT COUNT(r) FROM Ride r WHERE r.driver.id = :driverId AND r.status = 'COMPLETED'")
     long countCompletedByDriver(@Param("driverId") UUID driverId);
 
+    @Query("SELECT COALESCE(SUM(r.actualFare), 0) FROM Ride r WHERE r.driver.id = :driverId AND r.status = 'COMPLETED' AND r.completedAt BETWEEN :from AND :to")
+    java.math.BigDecimal sumEarningsByDriverAndPeriod(@Param("driverId") UUID driverId,
+                                                       @Param("from") java.time.LocalDateTime from,
+                                                       @Param("to") java.time.LocalDateTime to);
+
+    @Query("SELECT COUNT(r) FROM Ride r WHERE r.driver.id = :driverId AND r.status = 'COMPLETED' AND r.completedAt BETWEEN :from AND :to")
+    long countCompletedByDriverAndPeriod(@Param("driverId") UUID driverId,
+                                          @Param("from") java.time.LocalDateTime from,
+                                          @Param("to") java.time.LocalDateTime to);
+
+    @Query("SELECT r FROM Ride r WHERE r.scheduledAt IS NOT NULL AND r.scheduledAt BETWEEN :from AND :to AND r.status = 'REQUESTED'")
+    List<Ride> findScheduledRidesDue(@Param("from") java.time.LocalDateTime from,
+                                      @Param("to") java.time.LocalDateTime to);
+
+    Optional<Ride> findByShareToken(String shareToken);
+
     boolean existsByReference(String reference);
 
     long countByStatusIn(List<RideStatus> statuses);

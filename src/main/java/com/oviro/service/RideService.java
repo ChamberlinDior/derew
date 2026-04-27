@@ -1,18 +1,23 @@
 package com.oviro.service;
 
+import com.oviro.dto.request.ClientSosRequest;
 import com.oviro.dto.request.RatingRequest;
 import com.oviro.dto.request.RideRequest;
 import com.oviro.dto.response.RideEstimateResponse;
 import com.oviro.dto.response.RideResponse;
+import com.oviro.enums.NotificationType;
 import com.oviro.enums.RideStatus;
 import com.oviro.enums.ServiceType;
+import com.oviro.enums.TransactionType;
 import com.oviro.exception.BusinessException;
 import com.oviro.exception.ResourceNotFoundException;
 import com.oviro.model.DriverProfile;
 import com.oviro.model.Ride;
+import com.oviro.model.RideStop;
 import com.oviro.model.User;
 import com.oviro.repository.DriverProfileRepository;
 import com.oviro.repository.RideRepository;
+import com.oviro.repository.RideStopRepository;
 import com.oviro.repository.UserRepository;
 import com.oviro.util.FareCalculator;
 import com.oviro.util.ReferenceGenerator;
@@ -37,10 +42,13 @@ public class RideService {
     private final RideRepository rideRepository;
     private final UserRepository userRepository;
     private final DriverProfileRepository driverProfileRepository;
+    private final RideStopRepository rideStopRepository;
     private final FareCalculator fareCalculator;
     private final ReferenceGenerator referenceGenerator;
     private final SecurityContextHelper securityContextHelper;
     private final NotificationService notificationService;
+    private final WalletService walletService;
+    private final ReferralService referralService;
 
     @Transactional
     public RideResponse requestRide(RideRequest request) {
@@ -92,8 +100,28 @@ public class RideService {
                 .build();
 
         ride = rideRepository.save(ride);
-        log.info("Course demandée: {} par client {}", ride.getReference(), clientId);
 
+        // Persister les arrêts intermédiaires
+        if (request.getStops() != null && !request.getStops().isEmpty()) {
+            int order = 1;
+            for (RideRequest.StopRequest stopReq : request.getStops()) {
+                RideStop stop = RideStop.builder()
+                        .ride(ride)
+                        .stopOrder(order++)
+                        .address(stopReq.getAddress())
+                        .latitude(stopReq.getLatitude())
+                        .longitude(stopReq.getLongitude())
+                        .note(stopReq.getNote())
+                        .build();
+                rideStopRepository.save(stop);
+            }
+        }
+
+        // Générer un token de partage
+        ride.setShareToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+        ride = rideRepository.save(ride);
+
+        log.info("Course demandée: {} par client {}", ride.getReference(), clientId);
         return mapToResponse(ride);
     }
 
@@ -136,6 +164,7 @@ public class RideService {
             case COMPLETED -> {
                 ride.setCompletedAt(LocalDateTime.now());
                 ride.setActualFare(ride.getEstimatedFare());
+                referralService.processReferralOnFirstRide(ride.getClient().getId());
             }
             default -> { }
         }
@@ -258,6 +287,90 @@ public class RideService {
     public Page<RideResponse> getAvailableRides(Double lat, Double lng, Pageable pageable) {
         Page<Ride> rides = rideRepository.findByStatus(RideStatus.REQUESTED, pageable);
         return rides.map(this::mapToResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public RideResponse getRideByShareToken(String shareToken) {
+        return rideRepository.findByShareToken(shareToken)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", shareToken));
+    }
+
+    @Transactional
+    public void triggerClientSos(UUID rideId, ClientSosRequest request) {
+        UUID userId = securityContextHelper.getCurrentUserId();
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", rideId.toString()));
+
+        java.util.Map<String, String> data = java.util.Map.of(
+                "type", NotificationType.CLIENT_SOS_ALERT.name(),
+                "rideId", rideId.toString(),
+                "clientId", userId.toString(),
+                "latitude", request.getLatitude().toPlainString(),
+                "longitude", request.getLongitude().toPlainString()
+        );
+
+        List<com.oviro.model.User> admins = userRepository.findAllByRole(com.oviro.enums.Role.ADMIN);
+        for (com.oviro.model.User admin : admins) {
+            notificationService.sendToUser(admin.getId(), NotificationType.CLIENT_SOS_ALERT,
+                    "SOS Passager", "Un passager a déclenché une alerte SOS sur la course " + ride.getReference(),
+                    data, 30L, true);
+        }
+
+        if (ride.getDriver() != null) {
+            notificationService.sendToUser(ride.getDriver().getUser().getId(), NotificationType.CLIENT_SOS_ALERT,
+                    "SOS Passager", "Votre passager a signalé une urgence.", data, 30L, true);
+        }
+
+        log.info("SOS client déclenché sur course {} par userId={}", rideId, userId);
+    }
+
+    @Transactional
+    public void addTip(UUID rideId, BigDecimal amount) {
+        UUID clientId = securityContextHelper.getCurrentUserId();
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", rideId.toString()));
+
+        if (!ride.getClient().getId().equals(clientId)) {
+            throw new com.oviro.exception.BusinessException("Vous ne pouvez pas donner un pourboire pour cette course");
+        }
+        if (ride.getStatus() != RideStatus.COMPLETED && ride.getStatus() != RideStatus.PAID) {
+            throw new com.oviro.exception.BusinessException("Seules les courses terminées acceptent les pourboires");
+        }
+
+        walletService.debitForRide(clientId, amount, rideId);
+        if (ride.getDriver() != null) {
+            walletService.creditDriver(ride.getDriver().getUser().getId(), amount,
+                    "Pourboire course " + ride.getReference());
+            notificationService.sendToUser(ride.getDriver().getUser().getId(),
+                    NotificationType.TIP_RECEIVED, "Pourboire reçu !",
+                    "Vous avez reçu un pourboire de " + amount + " FCFA pour la course " + ride.getReference(),
+                    java.util.Map.of("rideId", rideId.toString(), "amount", amount.toPlainString()), 3600L, false);
+        }
+
+        ride.setTipAmount(ride.getTipAmount() != null ? ride.getTipAmount().add(amount) : amount);
+        rideRepository.save(ride);
+        log.info("Pourboire {} FCFA ajouté à la course {} par client {}", amount, rideId, clientId);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Map<ServiceType, RideEstimateResponse> estimateAllServiceTypes(
+            BigDecimal fromLat, BigDecimal fromLng, BigDecimal toLat, BigDecimal toLng) {
+        java.util.Map<ServiceType, RideEstimateResponse> result = new java.util.LinkedHashMap<>();
+        BigDecimal distance = fareCalculator.calculateDistance(fromLat, fromLng, toLat, toLng);
+        int duration = fareCalculator.estimateDuration(distance);
+        for (ServiceType st : ServiceType.values()) {
+            BigDecimal fare = fareCalculator.calculateFare(distance, duration, st);
+            result.put(st, RideEstimateResponse.builder()
+                    .serviceType(st)
+                    .estimatedPrice(fare)
+                    .estimatedDurationMinutes(duration)
+                    .estimatedDistanceKm(distance)
+                    .priceBreakdown(java.util.Map.of("base", BigDecimal.valueOf(500),
+                            "multiplier", BigDecimal.valueOf(st.getPriceMultiplier())))
+                    .build());
+        }
+        return result;
     }
 
     private void validateStatusTransition(RideStatus current, RideStatus next) {

@@ -1,19 +1,24 @@
 package com.oviro.controller;
 
+import com.oviro.dto.request.ClientSosRequest;
 import com.oviro.dto.request.RatingRequest;
 import com.oviro.dto.request.RideRequest;
+import com.oviro.dto.request.TipRequest;
 import com.oviro.dto.response.ApiResponse;
 import com.oviro.dto.response.RideEstimateResponse;
 import com.oviro.dto.response.RideResponse;
+import com.oviro.dto.response.SurgeInfoResponse;
 import com.oviro.enums.RideStatus;
 import com.oviro.enums.ServiceType;
 import com.oviro.service.RideService;
+import com.oviro.service.SurgeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import java.math.BigDecimal;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -32,6 +37,7 @@ import java.util.UUID;
 public class RideController {
 
     private final RideService rideService;
+    private final SurgeService surgeService;
 
     @GetMapping("/estimate")
     @Operation(summary = "Estimer le prix d'une course")
@@ -123,5 +129,41 @@ public class RideController {
     @Operation(summary = "Détails d'une course")
     public ResponseEntity<ApiResponse<RideResponse>> getRide(@PathVariable UUID rideId) {
         return ResponseEntity.ok(ApiResponse.ok(rideService.getRideById(rideId)));
+    }
+
+    @GetMapping("/share/{shareToken}")
+    @Operation(summary = "Suivre une course via token de partage (public)")
+    public ResponseEntity<ApiResponse<RideResponse>> getRideByShareToken(@PathVariable String shareToken) {
+        return ResponseEntity.ok(ApiResponse.ok(rideService.getRideByShareToken(shareToken)));
+    }
+
+    @PostMapping("/{rideId}/sos")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "Déclencher une alerte SOS passager")
+    public ResponseEntity<ApiResponse<Void>> clientSos(
+            @PathVariable UUID rideId,
+            @Valid @RequestBody ClientSosRequest request) {
+        rideService.triggerClientSos(rideId, request);
+        return ResponseEntity.ok(ApiResponse.ok("Alerte SOS envoyée", null));
+    }
+
+    @PostMapping("/{rideId}/tip")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "Donner un pourboire au chauffeur")
+    public ResponseEntity<ApiResponse<Void>> tip(
+            @PathVariable UUID rideId,
+            @Valid @RequestBody TipRequest request) {
+        rideService.addTip(rideId, request.getAmount());
+        return ResponseEntity.ok(ApiResponse.ok("Pourboire envoyé, merci !", null));
+    }
+
+    @GetMapping("/estimate/all")
+    @Operation(summary = "Estimer le prix pour tous les types de service")
+    public ResponseEntity<ApiResponse<java.util.Map<ServiceType, RideEstimateResponse>>> estimateAll(
+            @RequestParam BigDecimal fromLat,
+            @RequestParam BigDecimal fromLng,
+            @RequestParam BigDecimal toLat,
+            @RequestParam BigDecimal toLng) {
+        return ResponseEntity.ok(ApiResponse.ok(rideService.estimateAllServiceTypes(fromLat, fromLng, toLat, toLng)));
     }
 }

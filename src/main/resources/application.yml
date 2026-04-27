@@ -80,6 +80,28 @@ oviro:
   wallet:
     fcfa-per-ut: 1000
 
+  otp:
+    ttl-seconds: 600
+    max-attempts: 5
+    code-length: 6
+
+  referral:
+    referrer-bonus-fcfa: 2000
+    referred-bonus-fcfa: 1000
+
+  delivery:
+    base-fare-fcfa: 500
+    per-km-fcfa: 300
+    service-fee-fcfa: 500
+
+  food:
+    default-delivery-fee-fcfa: 500
+    commission-rate: 0.10
+
+  ride:
+    share-token-ttl-hours: 24
+    tip-max-fcfa: 50000
+
 app:
   storage:
     upload-dir: ${APP_UPLOAD_DIR:uploads}

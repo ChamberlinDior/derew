@@ -39,4 +39,7 @@ public class RegisterRequest {
     @Past(message = "La date de naissance doit être dans le passé")
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateOfBirth;
+
+    @Size(max = 20)
+    private String referralCode;
 }

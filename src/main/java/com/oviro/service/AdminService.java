@@ -30,6 +30,9 @@ public class AdminService {
     private final SosAlertRepository sosAlertRepository;
     private final WalletRepository walletRepository;
     private final NotificationService notificationService;
+    private final DeliveryRepository deliveryRepository;
+    private final FoodOrderRepository foodOrderRepository;
+    private final SupportTicketRepository supportTicketRepository;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> getAllUsers(Pageable pageable) {
@@ -118,6 +121,9 @@ public class AdminService {
         stats.put("activeDrivers", driverProfileRepository.countByStatus(DriverStatus.ONLINE));
         stats.put("pendingSosAlerts", sosAlertRepository.countByResolvedFalse());
         stats.put("totalTransactions", transactionRepository.count());
+        stats.put("totalDeliveries", deliveryRepository.count());
+        stats.put("totalFoodOrders", foodOrderRepository.count());
+        stats.put("openSupportTickets", supportTicketRepository.countByStatus(com.oviro.enums.SupportTicketStatus.OPEN));
         return stats;
     }
 

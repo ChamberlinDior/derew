@@ -1,5 +1,6 @@
 package com.oviro.model;
 
+import com.oviro.enums.PaymentMethod;
 import com.oviro.enums.RideStatus;
 import com.oviro.enums.ServiceType;
 import jakarta.persistence.*;
@@ -7,6 +8,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -128,11 +131,45 @@ public class Ride extends BaseEntity {
     private String senderNote;
 
     // -- Paiement --
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 20)
+    @Builder.Default
+    private PaymentMethod paymentMethod = PaymentMethod.WALLET;
+
+    @Column(name = "tip_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal tipAmount = BigDecimal.ZERO;
+
+    @Column(name = "promo_code", length = 30)
+    private String promoCode;
+
+    @Column(name = "promo_discount_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal promoDiscountAmount = BigDecimal.ZERO;
+
     @OneToOne(mappedBy = "ride", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private QrCodePayment qrCodePayment;
 
     @OneToOne(mappedBy = "ride", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Transaction transaction;
+
+    // -- Course planifiée --
+    @Column(name = "scheduled_at")
+    private LocalDateTime scheduledAt;
+
+    // -- Partage de course --
+    @Column(name = "share_token", unique = true, length = 100)
+    private String shareToken;
+
+    // -- Surge pricing --
+    @Column(name = "surge_multiplier", precision = 5, scale = 2)
+    @Builder.Default
+    private BigDecimal surgeMultiplier = BigDecimal.ONE;
+
+    // -- Multi-arrêts --
+    @OneToMany(mappedBy = "ride", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @Builder.Default
+    private List<RideStop> stops = new ArrayList<>();
 
     public boolean isForSomeoneElse() {
         return Boolean.TRUE.equals(forSomeoneElse);

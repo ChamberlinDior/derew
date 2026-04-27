@@ -133,6 +133,12 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- EMAIL (notifications et OTP par mail) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- FIREBASE ADMIN (FCM push notifications) -->
         <dependency>
             <groupId>com.google.firebase</groupId>

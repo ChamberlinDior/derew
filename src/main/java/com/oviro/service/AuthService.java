@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +46,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final FileStorageService fileStorageService;
+    private final ReferralService referralService;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -63,6 +65,10 @@ public class AuthService {
 
         user = userRepository.save(user);
 
+        // Générer un code de parrainage unique pour chaque nouvel utilisateur
+        user.setReferralCode(generateUniqueReferralCode(user));
+        user = userRepository.save(user);
+
         Wallet wallet = Wallet.builder()
                 .user(user)
                 .build();
@@ -77,6 +83,13 @@ public class AuthService {
                     .build();
 
             driverProfileRepository.save(driverProfile);
+        }
+
+        // Lier le parrainage si un code a été fourni
+        if (request.getReferralCode() != null && !request.getReferralCode().isBlank()) {
+            user.setReferredByCode(request.getReferralCode().trim().toUpperCase());
+            userRepository.save(user);
+            referralService.linkReferral(request.getReferralCode().trim().toUpperCase(), user.getId());
         }
 
         log.info("Nouvel utilisateur enregistré: {} [{}]", user.getFullName(), user.getRole());
@@ -278,6 +291,15 @@ public class AuthService {
                     log.warn("DriverProfile créé automatiquement au login/refresh pour userId={}", user.getId());
                     return saved;
                 });
+    }
+
+    private String generateUniqueReferralCode(User user) {
+        String base = "OVIRO" + user.getFirstName().substring(0, Math.min(2, user.getFirstName().length())).toUpperCase();
+        String candidate = base + ThreadLocalRandom.current().nextInt(1000, 9999);
+        while (userRepository.findByReferralCode(candidate).isPresent()) {
+            candidate = base + ThreadLocalRandom.current().nextInt(1000, 9999);
+        }
+        return candidate;
     }
 
     private String generateDriverLicenseNumber(User user) {

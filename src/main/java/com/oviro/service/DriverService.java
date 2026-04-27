@@ -306,6 +306,30 @@ public class DriverService {
         return candidate;
     }
 
+    @Transactional
+    public void uploadKycDocument(MultipartFile file, String documentType) {
+        if (file == null || file.isEmpty()) throw new BusinessException("Fichier requis");
+        if (file.getSize() > 10 * 1024 * 1024) throw new BusinessException("Fichier trop volumineux (max 10 MB)");
+
+        DriverProfile profile = getOrCreateMyProfileEntity();
+
+        // Stocker l'URL/nom du document (en production, uploader vers S3 ou CDN)
+        String filename = documentType.toLowerCase() + "_" + profile.getId() + "_" + file.getOriginalFilename();
+        switch (documentType) {
+            case "LICENSE" -> profile.setNationalIdDocumentUrl("/kyc/" + filename);
+            case "NATIONAL_ID" -> profile.setNationalId(profile.getNationalId() != null ? profile.getNationalId() : "PENDING");
+            case "VEHICLE_CARD" -> {
+                if (profile.getCurrentVehicle() != null) {
+                    profile.getCurrentVehicle().setInsuranceDocumentUrl("/kyc/" + filename);
+                    vehicleRepository.save(profile.getCurrentVehicle());
+                }
+            }
+        }
+
+        driverProfileRepository.save(profile);
+        log.info("Document KYC '{}' uploadé pour driver={}", documentType, profile.getId());
+    }
+
     private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("Le fichier image est obligatoire");
